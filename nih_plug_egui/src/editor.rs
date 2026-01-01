@@ -66,13 +66,20 @@ where
         parent: ParentWindowHandle,
         context: Arc<dyn GuiContext>,
     ) -> Box<dyn std::any::Any + Send> {
+        nih_plug::nih_log!("EguiEditor::spawn() called");
+
         let build = self.build.clone();
         let update = self.update.clone();
         let state = self.user_state.clone();
         let egui_state = self.egui_state.clone();
 
         let (unscaled_width, unscaled_height) = self.egui_state.size();
+        nih_plug::nih_log!("EguiEditor::spawn() size={}x{}", unscaled_width, unscaled_height);
+
         let scaling_factor = self.scaling_factor.load();
+        nih_plug::nih_log!("EguiEditor::spawn() scaling_factor={:?}", scaling_factor);
+
+        nih_plug::nih_log!("EguiEditor::spawn() calling EguiWindow::open_parented");
         let window = EguiWindow::open_parented(
             &ParentWindowHandleAdapter(parent),
             WindowOpenOptions {
@@ -131,8 +138,10 @@ where
                 (update)(egui_ctx, &setter, &mut state.write());
             },
         );
+        nih_plug::nih_log!("EguiEditor::spawn() EguiWindow::open_parented returned");
 
         self.egui_state.open.store(true, Ordering::Release);
+        nih_plug::nih_log!("EguiEditor::spawn() returning handle");
         Box::new(EguiEditorHandle {
             egui_state: self.egui_state.clone(),
             window,

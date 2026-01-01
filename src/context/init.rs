@@ -2,6 +2,7 @@
 
 use super::{HostInfo, PluginApi, TrackInfo};
 use crate::prelude::Plugin;
+use std::sync::Arc;
 
 /// Callbacks the plugin can make while it is being initialized. This is passed to the plugin during
 /// [`Plugin::initialize()`][crate::plugin::Plugin::initialize()].
@@ -22,7 +23,8 @@ pub trait InitContext<P: Plugin> {
 
     /// Get information about the track this plugin is inserted on.
     /// Only available for CLAP plugins when the host supports the track-info extension.
-    fn track_info(&self) -> Option<TrackInfo> {
+    /// Returns Arc so cloning doesn't allocate (safe for audio thread).
+    fn track_info(&self) -> Option<Arc<TrackInfo>> {
         None
     }
 

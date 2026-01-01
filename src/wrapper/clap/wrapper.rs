@@ -249,7 +249,8 @@ pub struct Wrapper<P: ClapPlugin> {
     /// The plugin's track-info extension, exposing the changed() callback.
     clap_plugin_track_info: clap_plugin_track_info,
     /// Cached track info, updated when host calls changed() callback. Safe to read from any thread.
-    cached_track_info: AtomicRefCell<Option<crate::context::TrackInfo>>,
+    /// Uses Arc so cloning doesn't allocate (safe for audio thread).
+    cached_track_info: AtomicRefCell<Option<Arc<crate::context::TrackInfo>>>,
     /// If `P::CLAP_POLY_MODULATION_CONFIG` is set, then the plugin can configure the current number
     /// of active voices using a context method called from the initialization or processing
     /// context. This defaults to the maximum number of voices.
@@ -1787,13 +1788,14 @@ impl<P: ClapPlugin> Wrapper<P> {
 
     /// Get cached track information. Safe to call from any thread.
     /// Returns None if no track info has been received from the host yet.
-    pub fn get_track_info(&self) -> Option<crate::context::TrackInfo> {
+    /// Uses Arc so cloning doesn't allocate memory (safe for audio thread).
+    pub fn get_track_info(&self) -> Option<Arc<crate::context::TrackInfo>> {
         self.cached_track_info.borrow().clone()
     }
 
     /// Query track info directly from host. MUST only be called on main thread.
     /// Updates the cache and returns the result.
-    fn query_and_cache_track_info(&self) -> Option<crate::context::TrackInfo> {
+    fn query_and_cache_track_info(&self) -> Option<Arc<crate::context::TrackInfo>> {
         let host_track_info = self.host_track_info.borrow();
         let ext = match host_track_info.as_ref() {
             Some(e) => e,
@@ -1851,7 +1853,7 @@ impl<P: ClapPlugin> Wrapper<P> {
                 track.is_for_return_track = info.flags & CLAP_TRACK_INFO_IS_FOR_RETURN_TRACK != 0;
                 track.is_for_bus = info.flags & CLAP_TRACK_INFO_IS_FOR_BUS != 0;
 
-                Some(track)
+                Some(Arc::new(track))
             } else {
                 nih_log!("CLAP track-info: get() returned false");
                 None

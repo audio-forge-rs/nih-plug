@@ -2,6 +2,7 @@
 
 use super::{PluginApi, TrackInfo};
 use crate::prelude::{Plugin, PluginNoteEvent};
+use std::sync::Arc;
 
 /// Contains both context data and callbacks the plugin can use during processing. Most notably this
 /// is how a plugin sends and receives note events, gets transport information, and accesses
@@ -95,7 +96,8 @@ pub trait ProcessContext<P: Plugin> {
     /// Get information about the track this plugin instance is on. This may change during the
     /// plugin's lifetime (e.g., when the track is renamed). Returns `None` if the host doesn't
     /// support the track-info extension or if the information is not available.
-    fn track_info(&self) -> Option<TrackInfo>;
+    /// Returns Arc so cloning doesn't allocate (safe for audio thread).
+    fn track_info(&self) -> Option<Arc<TrackInfo>>;
 
     // TODO: Add this, this works similar to [GuiContext::set_parameter] but it adds the parameter
     //       change to a queue (or directly to the VST3 plugin's parameter output queues) instead of

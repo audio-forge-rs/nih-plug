@@ -80,7 +80,7 @@ impl<P: Vst3Plugin> InitContext<P> for WrapperInitContext<'_, P> {
         // This is only supported by CLAP
     }
 
-    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+    fn track_info(&self) -> Option<Arc<crate::context::TrackInfo>> {
         // Track info is only supported by CLAP
         None
     }
@@ -122,7 +122,7 @@ impl<P: Vst3Plugin> ProcessContext<P> for WrapperProcessContext<'_, P> {
         // This is only supported by CLAP
     }
 
-    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+    fn track_info(&self) -> Option<Arc<crate::context::TrackInfo>> {
         // Track info is only supported by CLAP
         None
     }

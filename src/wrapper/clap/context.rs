@@ -83,7 +83,7 @@ impl<P: ClapPlugin> InitContext<P> for WrapperInitContext<'_, P> {
         self.wrapper.get_host_info()
     }
 
-    fn track_info(&self) -> Option<TrackInfo> {
+    fn track_info(&self) -> Option<Arc<TrackInfo>> {
         self.wrapper.get_track_info()
     }
 
@@ -137,7 +137,7 @@ impl<P: ClapPlugin> ProcessContext<P> for WrapperProcessContext<'_, P> {
         self.wrapper.set_current_voice_capacity(capacity)
     }
 
-    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+    fn track_info(&self) -> Option<Arc<crate::context::TrackInfo>> {
         self.wrapper.get_track_info()
     }
 }

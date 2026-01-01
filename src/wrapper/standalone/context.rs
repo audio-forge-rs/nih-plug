@@ -53,7 +53,7 @@ impl<P: Plugin, B: Backend<P>> InitContext<P> for WrapperInitContext<'_, P, B> {
         // This is only supported by CLAP
     }
 
-    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+    fn track_info(&self) -> Option<Arc<crate::context::TrackInfo>> {
         // Track info is not available in standalone mode
         None
     }
@@ -103,7 +103,7 @@ impl<P: Plugin, B: Backend<P>> ProcessContext<P> for WrapperProcessContext<'_, P
         // This is only supported by CLAP
     }
 
-    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+    fn track_info(&self) -> Option<Arc<crate::context::TrackInfo>> {
         // Track info is not available in standalone mode
         None
     }

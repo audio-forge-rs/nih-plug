@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use super::wrapper::{OutputParamEvent, Task, Wrapper};
 use crate::event_loop::EventLoop;
+use crate::context::{HostInfo, TrackInfo};
 use crate::prelude::{
     ClapPlugin, GuiContext, InitContext, ParamPtr, PluginApi, PluginNoteEvent, ProcessContext,
     RemoteControlsContext, RemoteControlsPage, RemoteControlsSection, Transport,
@@ -78,6 +79,14 @@ impl<P: ClapPlugin> InitContext<P> for WrapperInitContext<'_, P> {
         PluginApi::Clap
     }
 
+    fn host_info(&self) -> Option<HostInfo> {
+        self.wrapper.get_host_info()
+    }
+
+    fn track_info(&self) -> Option<TrackInfo> {
+        self.wrapper.get_track_info()
+    }
+
     fn execute(&self, task: P::BackgroundTask) {
         (self.wrapper.task_executor.lock())(task);
     }
@@ -126,6 +135,10 @@ impl<P: ClapPlugin> ProcessContext<P> for WrapperProcessContext<'_, P> {
 
     fn set_current_voice_capacity(&self, capacity: u32) {
         self.wrapper.set_current_voice_capacity(capacity)
+    }
+
+    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+        self.wrapper.get_track_info()
     }
 }
 

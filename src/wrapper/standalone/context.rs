@@ -52,6 +52,11 @@ impl<P: Plugin, B: Backend<P>> InitContext<P> for WrapperInitContext<'_, P, B> {
     fn set_current_voice_capacity(&self, _capacity: u32) {
         // This is only supported by CLAP
     }
+
+    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+        // Track info is not available in standalone mode
+        None
+    }
 }
 
 impl<P: Plugin, B: Backend<P>> ProcessContext<P> for WrapperProcessContext<'_, P, B> {
@@ -96,6 +101,11 @@ impl<P: Plugin, B: Backend<P>> ProcessContext<P> for WrapperProcessContext<'_, P
 
     fn set_current_voice_capacity(&self, _capacity: u32) {
         // This is only supported by CLAP
+    }
+
+    fn track_info(&self) -> Option<crate::context::TrackInfo> {
+        // Track info is not available in standalone mode
+        None
     }
 }
 

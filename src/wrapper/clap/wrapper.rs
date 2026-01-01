@@ -47,6 +47,12 @@ use clap_sys::ext::render::{
 use clap_sys::ext::state::{clap_plugin_state, CLAP_EXT_STATE};
 use clap_sys::ext::tail::{clap_plugin_tail, CLAP_EXT_TAIL};
 use clap_sys::ext::thread_check::{clap_host_thread_check, CLAP_EXT_THREAD_CHECK};
+use clap_sys::ext::track_info::{
+    clap_host_track_info, clap_plugin_track_info, clap_track_info, CLAP_EXT_TRACK_INFO,
+    CLAP_TRACK_INFO_HAS_AUDIO_CHANNEL, CLAP_TRACK_INFO_HAS_TRACK_COLOR,
+    CLAP_TRACK_INFO_HAS_TRACK_NAME, CLAP_TRACK_INFO_IS_FOR_BUS, CLAP_TRACK_INFO_IS_FOR_MASTER,
+    CLAP_TRACK_INFO_IS_FOR_RETURN_TRACK,
+};
 use clap_sys::ext::voice_info::{
     clap_host_voice_info, clap_plugin_voice_info, clap_voice_info, CLAP_EXT_VOICE_INFO,
     CLAP_VOICE_INFO_SUPPORTS_OVERLAPPING_NOTES,
@@ -237,6 +243,11 @@ pub struct Wrapper<P: ClapPlugin> {
 
     clap_plugin_voice_info: clap_plugin_voice_info,
     host_voice_info: AtomicRefCell<Option<ClapPtr<clap_host_voice_info>>>,
+
+    /// The host's track-info extension, if supported. Used to query track name, color, and type.
+    host_track_info: AtomicRefCell<Option<ClapPtr<clap_host_track_info>>>,
+    /// The plugin's track-info extension, exposing the changed() callback.
+    clap_plugin_track_info: clap_plugin_track_info,
     /// If `P::CLAP_POLY_MODULATION_CONFIG` is set, then the plugin can configure the current number
     /// of active voices using a context method called from the initialization or processing
     /// context. This defaults to the maximum number of voices.
@@ -669,6 +680,10 @@ impl<P: ClapPlugin> Wrapper<P> {
                 get: Some(Self::ext_voice_info_get),
             },
             host_voice_info: AtomicRefCell::new(None),
+            host_track_info: AtomicRefCell::new(None),
+            clap_plugin_track_info: clap_plugin_track_info {
+                changed: Some(Self::ext_track_info_changed),
+            },
             current_voice_capacity: AtomicU32::new(
                 P::CLAP_POLY_MODULATION_CONFIG
                     .map(|c| {
@@ -1734,6 +1749,110 @@ impl<P: ClapPlugin> Wrapper<P> {
         nih_debug_assert!(task_posted, "The task queue is full, dropping task...");
     }
 
+    /// Get information about the host (name, vendor, version, url).
+    /// Returns None if not running as CLAP or host doesn't provide this info.
+    pub fn get_host_info(&self) -> Option<crate::context::HostInfo> {
+        unsafe {
+            let host = &*self.host_callback;
+            let mut info = crate::context::HostInfo::default();
+
+            if !host.name.is_null() {
+                info.name = CStr::from_ptr(host.name)
+                    .to_str()
+                    .unwrap_or("")
+                    .to_string();
+            }
+            if !host.vendor.is_null() {
+                info.vendor = CStr::from_ptr(host.vendor)
+                    .to_str()
+                    .unwrap_or("")
+                    .to_string();
+            }
+            if !host.version.is_null() {
+                info.version = CStr::from_ptr(host.version)
+                    .to_str()
+                    .unwrap_or("")
+                    .to_string();
+            }
+            if !host.url.is_null() {
+                info.url = CStr::from_ptr(host.url).to_str().unwrap_or("").to_string();
+            }
+
+            Some(info)
+        }
+    }
+
+    /// Get information about the track this plugin is on.
+    /// Returns None if host doesn't support the track-info extension.
+    pub fn get_track_info(&self) -> Option<crate::context::TrackInfo> {
+        let host_track_info = self.host_track_info.borrow();
+        let ext = match host_track_info.as_ref() {
+            Some(e) => {
+                nih_debug_assert!(true, "CLAP track-info extension found");
+                e
+            }
+            None => {
+                nih_log!("CLAP track-info extension not available from host");
+                return None;
+            }
+        };
+
+        unsafe {
+            let mut info: clap_track_info = std::mem::zeroed();
+            let get_fn = match ext.get {
+                Some(f) => f,
+                None => {
+                    nih_log!("CLAP track-info: host has extension but get() is null");
+                    return None;
+                }
+            };
+
+            if get_fn(&*self.host_callback, &mut info) {
+                nih_log!(
+                    "CLAP track-info: got info, flags={:#x}, name_ptr={:?}, name_bytes={:?}",
+                    info.flags,
+                    info.name.as_ptr(),
+                    &info.name[..32.min(info.name.len())]
+                );
+                let mut track = crate::context::TrackInfo::default();
+
+                if info.flags & CLAP_TRACK_INFO_HAS_TRACK_NAME != 0 {
+                    track.name = Some(
+                        CStr::from_ptr(info.name.as_ptr())
+                            .to_str()
+                            .unwrap_or("")
+                            .to_string(),
+                    );
+                }
+
+                if info.flags & CLAP_TRACK_INFO_HAS_TRACK_COLOR != 0 {
+                    track.color = Some((info.color.red, info.color.green, info.color.blue));
+                }
+
+                if info.flags & CLAP_TRACK_INFO_HAS_AUDIO_CHANNEL != 0 {
+                    track.audio_channel_count = Some(info.audio_channel_count);
+                    if !info.audio_port_type.is_null() {
+                        track.audio_port_type = Some(
+                            CStr::from_ptr(info.audio_port_type)
+                                .to_str()
+                                .unwrap_or("")
+                                .to_string(),
+                        );
+                    }
+                }
+
+                track.is_for_master = info.flags & CLAP_TRACK_INFO_IS_FOR_MASTER != 0;
+                track.is_for_return_track = info.flags & CLAP_TRACK_INFO_IS_FOR_RETURN_TRACK != 0;
+                track.is_for_bus = info.flags & CLAP_TRACK_INFO_IS_FOR_BUS != 0;
+
+                Some(track)
+            } else {
+                nih_log!("CLAP track-info: get() returned false");
+                None
+            }
+        }
+    }
+
     pub fn set_latency_samples(&self, samples: u32) {
         // Only make a callback if it's actually needed
         // XXX: For CLAP we could move this handling to the Plugin struct, but it may be worthwhile
@@ -1850,6 +1969,10 @@ impl<P: ClapPlugin> Wrapper<P> {
         *wrapper.host_voice_info.borrow_mut() = query_host_extension::<clap_host_voice_info>(
             &wrapper.host_callback,
             CLAP_EXT_VOICE_INFO,
+        );
+        *wrapper.host_track_info.borrow_mut() = query_host_extension::<clap_host_track_info>(
+            &wrapper.host_callback,
+            CLAP_EXT_TRACK_INFO,
         );
         *wrapper.host_thread_check.borrow_mut() = query_host_extension::<clap_host_thread_check>(
             &wrapper.host_callback,
@@ -2337,6 +2460,9 @@ impl<P: ClapPlugin> Wrapper<P> {
             &wrapper.clap_plugin_tail as *const _ as *const c_void
         } else if id == CLAP_EXT_VOICE_INFO && P::CLAP_POLY_MODULATION_CONFIG.is_some() {
             &wrapper.clap_plugin_voice_info as *const _ as *const c_void
+        } else if id == CLAP_EXT_TRACK_INFO {
+            // Always export track-info extension so host knows we support the changed() callback
+            &wrapper.clap_plugin_track_info as *const _ as *const c_void
         } else {
             nih_trace!("Host tried to query unknown extension {:?}", id);
             std::ptr::null()
@@ -3208,6 +3334,29 @@ impl<P: ClapPlugin> Wrapper<P> {
                 true
             }
             None => false,
+        }
+    }
+
+    /// Called by the host when track information has changed.
+    /// We log the new track info and could notify the plugin if needed.
+    unsafe extern "C" fn ext_track_info_changed(plugin: *const clap_plugin) {
+        check_null_ptr!((), plugin, (*plugin).plugin_data);
+        let wrapper = &*((*plugin).plugin_data as *const Self);
+
+        nih_log!(">>> CLAP track-info CHANGED callback received!");
+
+        // Re-query track info from the host
+        if let Some(track_info) = wrapper.get_track_info() {
+            nih_log!(
+                ">>> CLAP track-info changed: name={:?}, color={:?}, is_master={}, is_return={}, is_bus={}",
+                track_info.name,
+                track_info.color,
+                track_info.is_for_master,
+                track_info.is_for_return_track,
+                track_info.is_for_bus
+            );
+        } else {
+            nih_log!(">>> CLAP track-info changed callback received, but no track info available");
         }
     }
 }

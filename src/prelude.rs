@@ -23,7 +23,7 @@ pub use crate::context::process::{ProcessContext, Transport};
 pub use crate::context::remote_controls::{
     RemoteControlsContext, RemoteControlsPage, RemoteControlsSection,
 };
-pub use crate::context::PluginApi;
+pub use crate::context::{HostInfo, PluginApi, TrackInfo};
 // This also includes the derive macro
 pub use crate::editor::{Editor, ParentWindowHandle};
 pub use crate::midi::sysex::SysExMessage;

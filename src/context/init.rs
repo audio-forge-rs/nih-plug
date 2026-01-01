@@ -1,6 +1,6 @@
 //! A context passed during plugin initialization.
 
-use super::PluginApi;
+use super::{HostInfo, PluginApi, TrackInfo};
 use crate::prelude::Plugin;
 
 /// Callbacks the plugin can make while it is being initialized. This is passed to the plugin during
@@ -13,6 +13,18 @@ use crate::prelude::Plugin;
 pub trait InitContext<P: Plugin> {
     /// Get the current plugin API.
     fn plugin_api(&self) -> PluginApi;
+
+    /// Get information about the host (DAW) running this plugin.
+    /// Returns None if not supported by the current plugin API or host.
+    fn host_info(&self) -> Option<HostInfo> {
+        None
+    }
+
+    /// Get information about the track this plugin is inserted on.
+    /// Only available for CLAP plugins when the host supports the track-info extension.
+    fn track_info(&self) -> Option<TrackInfo> {
+        None
+    }
 
     /// Run a task directly on this thread. This ensures that the task has finished executing before
     /// the plugin finishes initializing.

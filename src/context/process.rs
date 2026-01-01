@@ -1,6 +1,6 @@
 //! A context passed during the process function.
 
-use super::PluginApi;
+use super::{PluginApi, TrackInfo};
 use crate::prelude::{Plugin, PluginNoteEvent};
 
 /// Contains both context data and callbacks the plugin can use during processing. Most notably this
@@ -91,6 +91,11 @@ pub trait ProcessContext<P: Plugin> {
     /// runtime allows the host to better optimize polyphonic modulation, or to switch to strictly
     /// monophonic modulation when dropping the capacity down to 1.
     fn set_current_voice_capacity(&self, capacity: u32);
+
+    /// Get information about the track this plugin instance is on. This may change during the
+    /// plugin's lifetime (e.g., when the track is renamed). Returns `None` if the host doesn't
+    /// support the track-info extension or if the information is not available.
+    fn track_info(&self) -> Option<TrackInfo>;
 
     // TODO: Add this, this works similar to [GuiContext::set_parameter] but it adds the parameter
     //       change to a queue (or directly to the VST3 plugin's parameter output queues) instead of

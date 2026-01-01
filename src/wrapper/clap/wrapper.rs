@@ -248,6 +248,8 @@ pub struct Wrapper<P: ClapPlugin> {
     host_track_info: AtomicRefCell<Option<ClapPtr<clap_host_track_info>>>,
     /// The plugin's track-info extension, exposing the changed() callback.
     clap_plugin_track_info: clap_plugin_track_info,
+    /// Cached track info, updated when host calls changed() callback. Safe to read from any thread.
+    cached_track_info: AtomicRefCell<Option<crate::context::TrackInfo>>,
     /// If `P::CLAP_POLY_MODULATION_CONFIG` is set, then the plugin can configure the current number
     /// of active voices using a context method called from the initialization or processing
     /// context. This defaults to the maximum number of voices.
@@ -684,6 +686,7 @@ impl<P: ClapPlugin> Wrapper<P> {
             clap_plugin_track_info: clap_plugin_track_info {
                 changed: Some(Self::ext_track_info_changed),
             },
+            cached_track_info: AtomicRefCell::new(None),
             current_voice_capacity: AtomicU32::new(
                 P::CLAP_POLY_MODULATION_CONFIG
                     .map(|c| {
@@ -1782,22 +1785,25 @@ impl<P: ClapPlugin> Wrapper<P> {
         }
     }
 
-    /// Get information about the track this plugin is on.
-    /// Returns None if host doesn't support the track-info extension.
+    /// Get cached track information. Safe to call from any thread.
+    /// Returns None if no track info has been received from the host yet.
     pub fn get_track_info(&self) -> Option<crate::context::TrackInfo> {
+        self.cached_track_info.borrow().clone()
+    }
+
+    /// Query track info directly from host. MUST only be called on main thread.
+    /// Updates the cache and returns the result.
+    fn query_and_cache_track_info(&self) -> Option<crate::context::TrackInfo> {
         let host_track_info = self.host_track_info.borrow();
         let ext = match host_track_info.as_ref() {
-            Some(e) => {
-                nih_debug_assert!(true, "CLAP track-info extension found");
-                e
-            }
+            Some(e) => e,
             None => {
                 nih_log!("CLAP track-info extension not available from host");
                 return None;
             }
         };
 
-        unsafe {
+        let result = unsafe {
             let mut info: clap_track_info = std::mem::zeroed();
             let get_fn = match ext.get {
                 Some(f) => f,
@@ -1850,7 +1856,11 @@ impl<P: ClapPlugin> Wrapper<P> {
                 nih_log!("CLAP track-info: get() returned false");
                 None
             }
-        }
+        };
+
+        // Update cache
+        *self.cached_track_info.borrow_mut() = result.clone();
+        result
     }
 
     pub fn set_latency_samples(&self, samples: u32) {
@@ -1978,6 +1988,12 @@ impl<P: ClapPlugin> Wrapper<P> {
             &wrapper.host_callback,
             CLAP_EXT_THREAD_CHECK,
         );
+
+        // Populate track info cache now that we have the extension
+        if wrapper.host_track_info.borrow().is_some() {
+            nih_log!("CLAP init: querying initial track info");
+            wrapper.query_and_cache_track_info();
+        }
 
         true
     }
@@ -3338,15 +3354,15 @@ impl<P: ClapPlugin> Wrapper<P> {
     }
 
     /// Called by the host when track information has changed.
-    /// We log the new track info and could notify the plugin if needed.
+    /// Re-queries track info and updates the cache.
     unsafe extern "C" fn ext_track_info_changed(plugin: *const clap_plugin) {
         check_null_ptr!((), plugin, (*plugin).plugin_data);
         let wrapper = &*((*plugin).plugin_data as *const Self);
 
         nih_log!(">>> CLAP track-info CHANGED callback received!");
 
-        // Re-query track info from the host
-        if let Some(track_info) = wrapper.get_track_info() {
+        // Re-query track info from the host and update cache
+        if let Some(track_info) = wrapper.query_and_cache_track_info() {
             nih_log!(
                 ">>> CLAP track-info changed: name={:?}, color={:?}, is_master={}, is_return={}, is_bus={}",
                 track_info.name,

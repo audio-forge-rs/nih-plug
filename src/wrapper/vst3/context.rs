@@ -133,6 +133,11 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
         PluginApi::Vst3
     }
 
+    fn track_info(&self) -> Option<std::sync::Arc<crate::context::TrackInfo>> {
+        // Track info is only supported by CLAP
+        None
+    }
+
     fn request_resize(&self) -> bool {
         let task_posted = self.inner.schedule_gui(Task::RequestResize);
         nih_debug_assert!(task_posted, "The task queue is full, dropping task...");

@@ -114,6 +114,11 @@ impl<P: Plugin, B: Backend<P>> GuiContext for WrapperGuiContext<P, B> {
         PluginApi::Standalone
     }
 
+    fn track_info(&self) -> Option<std::sync::Arc<crate::context::TrackInfo>> {
+        // Track info is not available in standalone mode
+        None
+    }
+
     fn request_resize(&self) -> bool {
         self.wrapper.request_resize();
         true

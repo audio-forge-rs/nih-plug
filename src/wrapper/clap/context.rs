@@ -147,6 +147,10 @@ impl<P: ClapPlugin> GuiContext for WrapperGuiContext<P> {
         PluginApi::Clap
     }
 
+    fn track_info(&self) -> Option<std::sync::Arc<crate::context::TrackInfo>> {
+        self.wrapper.get_track_info()
+    }
+
     fn request_resize(&self) -> bool {
         self.wrapper.request_resize()
     }

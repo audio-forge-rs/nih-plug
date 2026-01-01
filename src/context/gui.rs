@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use super::PluginApi;
+use crate::context::TrackInfo;
 use crate::prelude::{Param, ParamPtr, Plugin, PluginState};
 
 /// Callbacks the plugin can make when the user interacts with its GUI such as updating parameter
@@ -17,6 +18,11 @@ pub trait GuiContext: Send + Sync + 'static {
     /// Get the current plugin API. This may be useful to display in the plugin's GUI as part of an
     /// about screen.
     fn plugin_api(&self) -> PluginApi;
+
+    /// Get the current track information. This returns the cached track info that is updated
+    /// whenever the host notifies the plugin of changes. Returns `None` if the host doesn't
+    /// support track info or hasn't provided it yet.
+    fn track_info(&self) -> Option<Arc<TrackInfo>>;
 
     /// Ask the host to resize the editor window to the size specified by
     /// [`Editor::size()`][crate::prelude::Editor::size()]. This will return false if the host
